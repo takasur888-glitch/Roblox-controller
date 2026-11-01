@@ -8,6 +8,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.content.res.Configuration
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
@@ -16,7 +17,6 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
 import kotlin.math.abs
-import kotlin.math.max
 import kotlin.math.min
 
 class OverlayAccessibilityService : AccessibilityService() {
@@ -62,18 +62,36 @@ class OverlayAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        refreshScreenGeometry()
+        showControls()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        refreshScreenGeometry()
+    }
+
+    private fun refreshScreenGeometry() {
         val metrics = resources.displayMetrics
-        screenWidth = metrics.widthPixels.toFloat()
-        screenHeight = metrics.heightPixels.toFloat()
+        val newWidth = metrics.widthPixels.toFloat()
+        val newHeight = metrics.heightPixels.toFloat()
+        if (newWidth == screenWidth && newHeight == screenHeight) return
+
+        screenWidth = newWidth
+        screenHeight = newHeight
         leftBaseX = dp(105).toFloat()
         leftBaseY = screenHeight - dp(135).toFloat()
         rightBaseX = screenWidth * 0.68f
         rightBaseY = screenHeight * 0.63f
-        leftPointer.x = leftBaseX
-        leftPointer.y = leftBaseY
-        rightPointer.x = rightBaseX
-        rightPointer.y = rightBaseY
-        showControls()
+
+        if (leftPointer.stroke == null) {
+            leftPointer.x = leftBaseX
+            leftPointer.y = leftBaseY
+        }
+        if (rightPointer.stroke == null) {
+            rightPointer.x = rightBaseX
+            rightPointer.y = rightBaseY
+        }
     }
 
     override fun onAccessibilityEvent(event: android.view.accessibility.AccessibilityEvent?) = Unit
@@ -262,8 +280,6 @@ class OverlayAccessibilityService : AccessibilityService() {
             rightStaysDown = !reachedEdge
         }
 
-        val rightStartX = if (rightPointer.stroke == null) rightBaseX else rightPointer.x
-        val rightStartY = if (rightPointer.stroke == null) rightBaseY else rightPointer.y
         val rightBuilt = buildPointer(
             rightPointer, rightActive, rightBaseX, rightBaseY,
             rightEndX, rightEndY, rightStaysDown
