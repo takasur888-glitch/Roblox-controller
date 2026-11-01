@@ -8,32 +8,83 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
+import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.min
 
 class OverlayAccessibilityService : AccessibilityService() {
     private lateinit var windowManager: WindowManager
     private val overlayViews = mutableListOf<View>()
-    private var lastLeftDispatch = 0L
-    private var lastRightDispatch = 0L
+    private val handler = Handler(Looper.getMainLooper())
+
+    private var leftActive = false
+    private var rightActive = false
+    private var leftX = 0f
+    private var leftY = 0f
+    private var rightX = 0f
+    private var rightY = 0f
+    private var pendingJump = false
+    private var paused = false
+    private var dispatching = false
+
+    private val leftPointer = PointerTrack()
+    private val rightPointer = PointerTrack()
+
+    private var screenWidth = 0f
+    private var screenHeight = 0f
+    private var leftBaseX = 0f
+    private var leftBaseY = 0f
+    private var rightBaseX = 0f
+    private var rightBaseY = 0f
+
+    private val segmentDuration = 70L
+
+    private data class PointerTrack(
+        var stroke: GestureDescription.StrokeDescription? = null,
+        var x: Float = 0f,
+        var y: Float = 0f
+    )
+
+    private data class BuiltPointer(
+        val stroke: GestureDescription.StrokeDescription,
+        val endX: Float,
+        val endY: Float,
+        val staysDown: Boolean
+    )
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        val metrics = resources.displayMetrics
+        screenWidth = metrics.widthPixels.toFloat()
+        screenHeight = metrics.heightPixels.toFloat()
+        leftBaseX = dp(105).toFloat()
+        leftBaseY = screenHeight - dp(135).toFloat()
+        rightBaseX = screenWidth * 0.68f
+        rightBaseY = screenHeight * 0.63f
+        leftPointer.x = leftBaseX
+        leftPointer.y = leftBaseY
+        rightPointer.x = rightBaseX
+        rightPointer.y = rightBaseY
         showControls()
     }
 
     override fun onAccessibilityEvent(event: android.view.accessibility.AccessibilityEvent?) = Unit
 
     override fun onInterrupt() {
+        stopAllInputs()
         removeControls()
     }
 
     override fun onDestroy() {
+        stopAllInputs()
         removeControls()
         super.onDestroy()
     }
@@ -42,38 +93,28 @@ class OverlayAccessibilityService : AccessibilityService() {
         if (overlayViews.isNotEmpty()) return
 
         val leftPad = JoystickPad(this, "MOVE") { x, y, active ->
-            if (active) dispatchStickGesture(left = true, x = x, y = y)
+            leftActive = active && !paused
+            leftX = x
+            leftY = y
+            pumpGestures()
         }
         addOverlay(
             leftPad,
-            WindowManager.LayoutParams(
-                dp(154), dp(154),
-                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                    WindowManager.LayoutParams.FLAG_SPLIT_TOUCH,
-                PixelFormat.TRANSLUCENT
-            ).apply {
-                gravity = Gravity.BOTTOM or Gravity.LEFT
+            overlayParams(dp(154), dp(154), Gravity.BOTTOM or Gravity.LEFT).apply {
                 x = dp(18)
                 y = dp(26)
             }
         )
 
         val rightPad = JoystickPad(this, "CAMERA") { x, y, active ->
-            if (active) dispatchStickGesture(left = false, x = x, y = y)
+            rightActive = active && !paused
+            rightX = x
+            rightY = y
+            pumpGestures()
         }
         addOverlay(
             rightPad,
-            WindowManager.LayoutParams(
-                dp(154), dp(154),
-                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                    WindowManager.LayoutParams.FLAG_SPLIT_TOUCH,
-                PixelFormat.TRANSLUCENT
-            ).apply {
-                gravity = Gravity.BOTTOM or Gravity.RIGHT
+            overlayParams(dp(154), dp(154), Gravity.BOTTOM or Gravity.RIGHT).apply {
                 x = dp(18)
                 y = dp(26)
             }
@@ -81,7 +122,7 @@ class OverlayAccessibilityService : AccessibilityService() {
 
         val jump = TextView(this).apply {
             text = "JUMP"
-            textSize = 15f
+            textSize = 14f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
             background = GradientDrawable().apply {
@@ -90,25 +131,64 @@ class OverlayAccessibilityService : AccessibilityService() {
                 setStroke(dp(2), Color.WHITE)
             }
             setOnTouchListener { _, event ->
-                if (event.action == MotionEvent.ACTION_DOWN) dispatchJumpTap()
+                if (event.actionMasked == MotionEvent.ACTION_DOWN && !paused) {
+                    pendingJump = true
+                    pumpGestures()
+                }
                 true
             }
         }
         addOverlay(
             jump,
-            WindowManager.LayoutParams(
-                dp(76), dp(76),
-                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                    WindowManager.LayoutParams.FLAG_SPLIT_TOUCH,
-                PixelFormat.TRANSLUCENT
-            ).apply {
-                gravity = Gravity.BOTTOM or Gravity.RIGHT
+            overlayParams(dp(76), dp(76), Gravity.BOTTOM or Gravity.RIGHT).apply {
                 x = dp(44)
                 y = dp(198)
             }
         )
+
+        val stop = TextView(this).apply {
+            text = "STOP"
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            background = roundedBackground(Color.rgb(185, 40, 40))
+            setOnClickListener {
+                paused = !paused
+                if (paused) {
+                    stopAllInputs()
+                    text = "START"
+                    background = roundedBackground(Color.rgb(35, 145, 75))
+                } else {
+                    text = "STOP"
+                    background = roundedBackground(Color.rgb(185, 40, 40))
+                }
+            }
+        }
+        addOverlay(
+            stop,
+            overlayParams(dp(76), dp(42), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
+                y = dp(18)
+            }
+        )
+    }
+
+    private fun overlayParams(width: Int, height: Int, gravityValue: Int) =
+        WindowManager.LayoutParams(
+            width,
+            height,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_SPLIT_TOUCH,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = gravityValue
+        }
+
+    private fun roundedBackground(color: Int) = GradientDrawable().apply {
+        cornerRadius = dp(12).toFloat()
+        setColor(color)
+        setStroke(dp(1), Color.WHITE)
     }
 
     private fun addOverlay(view: View, params: WindowManager.LayoutParams) {
@@ -116,8 +196,16 @@ class OverlayAccessibilityService : AccessibilityService() {
             windowManager.addView(view, params)
             overlayViews.add(view)
         } catch (_: Exception) {
-            // If the system refuses an overlay, leave the other controls available.
+            // Keep any controls that the system did allow.
         }
+    }
+
+    private fun stopAllInputs() {
+        paused = true
+        leftActive = false
+        rightActive = false
+        pendingJump = false
+        pumpGestures()
     }
 
     private fun removeControls() {
@@ -132,40 +220,155 @@ class OverlayAccessibilityService : AccessibilityService() {
         overlayViews.clear()
     }
 
-    private fun dispatchStickGesture(left: Boolean, x: Float, y: Float) {
-        val now = System.currentTimeMillis()
-        if (left && now - lastLeftDispatch < 65L) return
-        if (!left && now - lastRightDispatch < 45L) return
-        if (left) lastLeftDispatch = now else lastRightDispatch = now
+    /**
+     * Sends both joystick pointers in ONE GestureDescription. Continued strokes
+     * keep the pointers down while the next short segment is dispatched.
+     * This avoids dispatching one joystick over the top of the other.
+     */
+    private fun pumpGestures() {
+        if (dispatching || !::windowManager.isInitialized) return
 
-        val metrics = resources.displayMetrics
-        val startX = if (left) dp(105).toFloat() else metrics.widthPixels - dp(105).toFloat()
-        val startY = metrics.heightPixels - dp(135).toFloat()
-        val distance = if (left) dp(48).toFloat() else dp(72).toFloat()
-        val endX = (startX + x * distance).coerceIn(2f, metrics.widthPixels - 2f)
-        val endY = (startY + y * distance).coerceIn(2f, metrics.heightPixels - 2f)
+        val hasWork = leftActive || rightActive || pendingJump ||
+            leftPointer.stroke?.willContinue() == true ||
+            rightPointer.stroke?.willContinue() == true
+        if (!hasWork) return
 
-        val path = Path().apply {
-            moveTo(startX, startY)
-            lineTo(endX, endY)
+        val leftTargetX = (leftBaseX + leftX * dp(48)).coerceIn(2f, screenWidth - 2f)
+        val leftTargetY = (leftBaseY + leftY * dp(48)).coerceIn(2f, screenHeight - 2f)
+
+        val leftBuilt = buildPointer(
+            leftPointer, leftActive, leftBaseX, leftBaseY,
+            leftTargetX, leftTargetY, leftActive
+        )
+
+        var rightEndX = rightPointer.x
+        var rightEndY = rightPointer.y
+        var rightStaysDown = rightActive
+        if (rightActive) {
+            val speed = getSharedPreferences("dualstick", MODE_PRIVATE)
+                .getFloat("camera_speed", 1.0f)
+            val step = dp(9).toFloat() * speed
+            val rawX = (if (rightPointer.stroke == null) rightBaseX else rightPointer.x) +
+                rightX * step
+            val rawY = (if (rightPointer.stroke == null) rightBaseY else rightPointer.y) +
+                rightY * step
+            val minX = screenWidth * 0.36f
+            val maxX = screenWidth * 0.94f
+            val minY = screenHeight * 0.18f
+            val maxY = screenHeight * 0.82f
+            rightEndX = rawX.coerceIn(minX, maxX)
+            rightEndY = rawY.coerceIn(minY, maxY)
+            val reachedEdge = abs(rightEndX - rawX) > 0.5f || abs(rightEndY - rawY) > 0.5f
+            rightStaysDown = !reachedEdge
         }
-        val stroke = GestureDescription.StrokeDescription(path, 0, 55)
-        val gesture = GestureDescription.Builder().addStroke(stroke).build()
-        dispatchGesture(gesture, null, null)
+
+        val rightStartX = if (rightPointer.stroke == null) rightBaseX else rightPointer.x
+        val rightStartY = if (rightPointer.stroke == null) rightBaseY else rightPointer.y
+        val rightBuilt = buildPointer(
+            rightPointer, rightActive, rightBaseX, rightBaseY,
+            rightEndX, rightEndY, rightStaysDown
+        )
+
+        val builder = GestureDescription.Builder()
+        if (leftBuilt != null) builder.addStroke(leftBuilt.stroke)
+        if (rightBuilt != null) builder.addStroke(rightBuilt.stroke)
+
+        val jumpAdded = pendingJump
+        if (jumpAdded) {
+            val jumpX = screenWidth - dp(78).toFloat()
+            val jumpY = screenHeight - dp(205).toFloat()
+            val jumpPath = Path().apply {
+                moveTo(jumpX, jumpY)
+                lineTo(jumpX + 1f, jumpY + 1f)
+            }
+            builder.addStroke(GestureDescription.StrokeDescription(jumpPath, 0, 65))
+        }
+
+        if (leftBuilt == null && rightBuilt == null && !jumpAdded) return
+
+        dispatching = true
+        pendingJump = false
+        val accepted = dispatchGesture(
+            builder.build(),
+            object : GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription?) {
+                    super.onCompleted(gestureDescription)
+                    applyBuiltPointer(leftPointer, leftBuilt, leftBaseX, leftBaseY)
+                    applyBuiltPointer(rightPointer, rightBuilt, rightBaseX, rightBaseY)
+                    dispatching = false
+                    handler.post { pumpGestures() }
+                }
+
+                override fun onCancelled(gestureDescription: GestureDescription?) {
+                    super.onCancelled(gestureDescription)
+                    resetPointer(leftPointer, leftBaseX, leftBaseY)
+                    resetPointer(rightPointer, rightBaseX, rightBaseY)
+                    dispatching = false
+                    if (leftActive || rightActive || pendingJump) {
+                        handler.postDelayed({ pumpGestures() }, 90L)
+                    }
+                }
+            },
+            handler
+        )
+
+        if (!accepted) {
+            resetPointer(leftPointer, leftBaseX, leftBaseY)
+            resetPointer(rightPointer, rightBaseX, rightBaseY)
+            dispatching = false
+        }
     }
 
-    private fun dispatchJumpTap() {
-        val metrics = resources.displayMetrics
-        val x = metrics.widthPixels - dp(78).toFloat()
-        val y = metrics.heightPixels - dp(205).toFloat()
+    private fun buildPointer(
+        track: PointerTrack,
+        active: Boolean,
+        baseX: Float,
+        baseY: Float,
+        targetX: Float,
+        targetY: Float,
+        staysDown: Boolean
+    ): BuiltPointer? {
+        val previous = track.stroke
+        if (previous == null && !active) return null
+
+        val startX = if (previous != null) track.x else baseX
+        val startY = if (previous != null) track.y else baseY
         val path = Path().apply {
-            moveTo(x, y)
-            lineTo(x + 1f, y + 1f)
+            moveTo(startX, startY)
+            if (abs(targetX - startX) > 0.5f || abs(targetY - startY) > 0.5f) {
+                lineTo(targetX, targetY)
+            }
         }
-        val gesture = GestureDescription.Builder()
-            .addStroke(GestureDescription.StrokeDescription(path, 0, 70))
-            .build()
-        dispatchGesture(gesture, null, null)
+
+        val stroke = if (previous != null && previous.willContinue()) {
+            previous.continueStroke(path, 0, segmentDuration, staysDown)
+        } else {
+            GestureDescription.StrokeDescription(path, 0, segmentDuration, staysDown)
+        }
+        return BuiltPointer(stroke, targetX, targetY, staysDown)
+    }
+
+    private fun applyBuiltPointer(
+        track: PointerTrack,
+        built: BuiltPointer?,
+        baseX: Float,
+        baseY: Float
+    ) {
+        if (built == null) return
+        track.stroke = built.stroke.takeIf { built.staysDown }
+        if (built.staysDown) {
+            track.x = built.endX
+            track.y = built.endY
+        } else {
+            track.x = baseX
+            track.y = baseY
+        }
+    }
+
+    private fun resetPointer(track: PointerTrack, baseX: Float, baseY: Float) {
+        track.stroke = null
+        track.x = baseX
+        track.y = baseY
     }
 
     private fun dp(value: Int): Int =
@@ -208,7 +411,6 @@ class OverlayAccessibilityService : AccessibilityService() {
             val cy = height / 2f
             val radius = min(width, height) * 0.43f
             val knobRadius = radius * 0.38f
-
             canvas.drawCircle(cx, cy, radius, backgroundPaint)
             canvas.drawCircle(cx, cy, radius, ringPaint)
             val drawX = if (pressed) knobX else cx
