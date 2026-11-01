@@ -19,7 +19,7 @@ The MOVE and CAMERA outputs are submitted together in one Android GestureDescrip
 4. Test MOVE, CAMERA, and JUMP in a safe area before using them in a live match.
 5. Use STOP immediately if touches land in the wrong places or controls behave unexpectedly.
 
-The default touch coordinates are estimates. Different screen sizes, Roblox UI scaling, game layouts, and Android navigation modes can change where the game's movement and jump controls appear. The initial version does not yet include coordinate calibration or draggable overlay placement.
+The default touch coordinates are estimates. Use **Calibrate touch positions** in the app to adjust the horizontal and vertical target positions for MOVE, CAMERA, and JUMP. Different screen sizes, Roblox UI scaling, game layouts, and Android navigation modes can change where the game's controls appear. The floating joystick panels themselves are currently anchored to the lower corners and are not draggable.
 
 ## Permissions and privacy
 
