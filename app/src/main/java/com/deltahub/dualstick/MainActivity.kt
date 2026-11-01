@@ -10,18 +10,23 @@ import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 
 class MainActivity : Activity() {
     private lateinit var statusText: TextView
+    private lateinit var speedButton: Button
+
+    private val speedNames = arrayOf("Slow", "Normal", "Fast")
+    private val speedValues = floatArrayOf(0.55f, 1.0f, 1.7f)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val root = LinearLayout(this).apply {
+        val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(24), dp(36), dp(24), dp(24))
+            setPadding(dp(24), dp(30), dp(24), dp(24))
         }
 
         val title = TextView(this).apply {
@@ -30,38 +35,38 @@ class MainActivity : Activity() {
             setTextColor(0xFF171717.toInt())
             gravity = Gravity.CENTER
         }
-        root.addView(title, matchWrap())
+        content.addView(title, matchWrap())
 
         val subtitle = TextView(this).apply {
-            text = "Experimental floating touch-control prototype"
+            text = "Two floating controls for Roblox mobile"
             textSize = 16f
             gravity = Gravity.CENTER
-            setPadding(0, dp(10), 0, dp(22))
+            setPadding(0, dp(8), 0, dp(18))
         }
-        root.addView(subtitle, matchWrap())
+        content.addView(subtitle, matchWrap())
 
         val privacyNote = TextView(this).apply {
-            text = "Accessibility is used only to display the floating controls and send gestures when you touch them. This app does not retrieve screen contents or send your data to a server. Android may still show a security warning because gesture access is sensitive."
+            text = "This app uses Android Accessibility only to show its floating controls and send touch gestures when you use them. It does not read screen contents, request internet access, or upload your data. Gesture access is sensitive, so enable it only if you trust this app."
             textSize = 14f
             gravity = Gravity.CENTER
             setPadding(0, dp(8), 0, dp(18))
         }
-        root.addView(privacyNote, matchWrap())
+        content.addView(privacyNote, matchWrap())
 
         statusText = TextView(this).apply {
             textSize = 15f
             gravity = Gravity.CENTER
-            setPadding(0, dp(10), 0, dp(24))
+            setPadding(0, dp(8), 0, dp(18))
         }
-        root.addView(statusText, matchWrap())
+        content.addView(statusText, matchWrap())
 
         val settingsButton = Button(this).apply {
-            text = "Review Accessibility Permission"
+            text = "Enable floating controls"
             setOnClickListener {
                 AlertDialog.Builder(this@MainActivity)
                     .setTitle("Sensitive permission")
                     .setMessage(
-                        "DualStick Overlay needs Android Accessibility gesture access to send touch gestures when you use its floating controls. It does not request permission to read screen contents. Only continue if you understand and trust this experimental app."
+                        "DualStick needs Accessibility gesture access to control touch points for the floating MOVE, CAMERA, and JUMP controls. It does not request permission to read screen contents. Only enable it if you understand and trust this experimental app."
                     )
                     .setNegativeButton("Cancel", null)
                     .setPositiveButton("Open settings") { _, _ ->
@@ -70,24 +75,34 @@ class MainActivity : Activity() {
                     .show()
             }
         }
-        root.addView(settingsButton, matchWrap())
+        content.addView(settingsButton, matchWrap())
+
+        speedButton = Button(this).apply {
+            setOnClickListener { showCameraSpeedDialog() }
+        }
+        content.addView(speedButton, matchWrap())
 
         val refreshButton = Button(this).apply {
-            text = "Check Connection"
+            text = "Check connection"
             setOnClickListener { refreshStatus() }
         }
-        root.addView(refreshButton, matchWrap())
+        content.addView(refreshButton, matchWrap())
 
-        val note = TextView(this).apply {
-            text = "To remove the floating controls, turn this service off in Android Accessibility settings. The joystick input is experimental and may not work correctly in every game."
-            textSize = 13f
-            gravity = Gravity.CENTER
-            setPadding(0, dp(24), 0, 0)
+        val instructions = TextView(this).apply {
+            text = "How to use\n1. Enable the service above.\n2. Open Roblox and enter a game using Fixed Thumbstick.\n3. Use MOVE on the left and CAMERA on the right at the same time.\n4. JUMP taps the usual lower-right jump area.\n5. Tap STOP at the top of the screen to release all controls immediately.\n\nThe touch positions are initial defaults, not universal settings. Test in a safe game area first. If the controls do not land correctly, tap STOP."
+            textSize = 14f
+            gravity = Gravity.START
+            setPadding(0, dp(20), 0, dp(12))
         }
-        root.addView(note, matchWrap())
+        content.addView(instructions, matchWrap())
 
-        setContentView(root)
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            addView(content)
+        }
+        setContentView(scroll)
         refreshStatus()
+        refreshSpeedButton()
     }
 
     override fun onResume() {
@@ -95,12 +110,39 @@ class MainActivity : Activity() {
         if (::statusText.isInitialized) refreshStatus()
     }
 
+    private fun showCameraSpeedDialog() {
+        val prefs = getSharedPreferences("dualstick", MODE_PRIVATE)
+        val current = prefs.getFloat("camera_speed", 1.0f)
+        val selected = speedValues.indices.minByOrNull {
+            kotlin.math.abs(speedValues[it] - current)
+        } ?: 1
+
+        AlertDialog.Builder(this)
+            .setTitle("Camera drag speed")
+            .setSingleChoiceItems(speedNames, selected) { dialog, which ->
+                prefs.edit().putFloat("camera_speed", speedValues[which]).apply()
+                refreshSpeedButton()
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun refreshSpeedButton() {
+        val current = getSharedPreferences("dualstick", MODE_PRIVATE)
+            .getFloat("camera_speed", 1.0f)
+        val index = speedValues.indices.minByOrNull {
+            kotlin.math.abs(speedValues[it] - current)
+        } ?: 1
+        speedButton.text = "Camera speed: ${speedNames[index]}"
+    }
+
     private fun refreshStatus() {
         val enabled = isAccessibilityServiceEnabled()
         statusText.text = if (enabled) {
-            "Accessibility service: ENABLED"
+            "Floating controls service: ENABLED"
         } else {
-            "Accessibility service: NOT ENABLED"
+            "Floating controls service: NOT ENABLED"
         }
     }
 
