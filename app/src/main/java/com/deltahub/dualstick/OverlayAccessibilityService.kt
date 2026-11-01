@@ -78,10 +78,10 @@ class OverlayAccessibilityService : AccessibilityService() {
         screenWidth = newWidth
         screenHeight = newHeight
         val prefs = getSharedPreferences("dualstick", MODE_PRIVATE)
-        leftBaseX = screenWidth * prefs.getFloat("move_x_ratio", 0.115f).coerceIn(0.02f, 0.45f)
-        leftBaseY = screenHeight * prefs.getFloat("move_y_ratio", 0.67f).coerceIn(0.20f, 0.95f)
-        rightBaseX = screenWidth * prefs.getFloat("camera_x_ratio", 0.68f).coerceIn(0.30f, 0.96f)
-        rightBaseY = screenHeight * prefs.getFloat("camera_y_ratio", 0.63f).coerceIn(0.18f, 0.90f)
+        leftBaseX = screenWidth * prefs.getFloat("move_x_ratio", 0.115f).coerceIn(0.02f, 0.98f)
+        leftBaseY = screenHeight * prefs.getFloat("move_y_ratio", 0.67f).coerceIn(0.02f, 0.98f)
+        rightBaseX = screenWidth * prefs.getFloat("camera_x_ratio", 0.68f).coerceIn(0.02f, 0.98f)
+        rightBaseY = screenHeight * prefs.getFloat("camera_y_ratio", 0.63f).coerceIn(0.02f, 0.98f)
 
         if (leftPointer.stroke == null) {
             leftPointer.x = leftBaseX
@@ -270,10 +270,10 @@ class OverlayAccessibilityService : AccessibilityService() {
                 rightX * step
             val rawY = (if (rightPointer.stroke == null) rightBaseY else rightPointer.y) +
                 rightY * step
-            val minX = screenWidth * 0.36f
-            val maxX = screenWidth * 0.94f
-            val minY = screenHeight * 0.18f
-            val maxY = screenHeight * 0.82f
+            val minX = screenWidth * 0.02f
+            val maxX = screenWidth * 0.98f
+            val minY = screenHeight * 0.02f
+            val maxY = screenHeight * 0.98f
             rightEndX = rawX.coerceIn(minX, maxX)
             rightEndY = rawY.coerceIn(minY, maxY)
             val reachedEdge = abs(rightEndX - rawX) > 0.5f || abs(rightEndY - rawY) > 0.5f
@@ -292,8 +292,8 @@ class OverlayAccessibilityService : AccessibilityService() {
         val jumpAdded = pendingJump
         if (jumpAdded) {
             val prefs = getSharedPreferences("dualstick", MODE_PRIVATE)
-            val jumpX = screenWidth * prefs.getFloat("jump_x_ratio", 0.91f).coerceIn(0.60f, 0.98f)
-            val jumpY = screenHeight * prefs.getFloat("jump_y_ratio", 0.76f).coerceIn(0.20f, 0.95f)
+            val jumpX = screenWidth * prefs.getFloat("jump_x_ratio", 0.91f).coerceIn(0.02f, 0.98f)
+            val jumpY = screenHeight * prefs.getFloat("jump_y_ratio", 0.76f).coerceIn(0.02f, 0.98f)
             val jumpPath = Path().apply {
                 moveTo(jumpX, jumpY)
                 lineTo(jumpX + 1f, jumpY + 1f)
