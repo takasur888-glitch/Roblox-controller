@@ -96,7 +96,7 @@ class MainActivity : Activity() {
         content.addView(refreshButton, matchWrap())
 
         val instructions = TextView(this).apply {
-            text = "How to use\n1. Enable the service above.\n2. Open Roblox and enter a game using Fixed Thumbstick.\n3. Use MOVE on the left and CAMERA on the right at the same time.\n4. JUMP taps the usual lower-right jump area.\n5. Tap STOP at the top of the screen to release all controls immediately.\n\nThe touch positions are initial defaults, not universal settings. Test in a safe game area first. If the controls do not land correctly, tap STOP."
+            text = "How to use\n1. Enable the service above.\n2. Open Roblox and enter a game using Fixed Thumbstick.\n3. Use MOVE on the left and CAMERA on the right at the same time.\n4. Use Camera speed and Calibrate touch positions in this app to adjust the controls.\n5. JUMP taps the calibrated jump area.\n6. Tap STOP at the top of the screen to release all controls immediately.\n\nStart with the default positions, then calibrate if a touch misses its Roblox button. Test in a safe game area first."
             textSize = 14f
             gravity = Gravity.START
             setPadding(0, dp(20), 0, dp(12))
