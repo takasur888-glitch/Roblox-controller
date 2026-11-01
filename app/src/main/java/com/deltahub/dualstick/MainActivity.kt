@@ -11,6 +11,7 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.TextView
 
 class MainActivity : Activity() {
@@ -82,6 +83,12 @@ class MainActivity : Activity() {
         }
         content.addView(speedButton, matchWrap())
 
+        val calibrationButton = Button(this).apply {
+            text = "Calibrate touch positions"
+            setOnClickListener { showCalibrationDialog() }
+        }
+        content.addView(calibrationButton, matchWrap())
+
         val refreshButton = Button(this).apply {
             text = "Check connection"
             setOnClickListener { refreshStatus() }
@@ -126,6 +133,92 @@ class MainActivity : Activity() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun showCalibrationDialog() {
+        val prefs = getSharedPreferences("dualstick", MODE_PRIVATE)
+        val values = linkedMapOf<String, Float>()
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(8))
+        }
+
+        fun addPosition(title: String, xKey: String, yKey: String, defaultX: Float, defaultY: Float) {
+            val heading = TextView(this).apply {
+                text = title
+                textSize = 16f
+                setTextColor(0xFF202020.toInt())
+                setPadding(0, dp(14), 0, dp(4))
+            }
+            panel.addView(heading, matchWrap())
+            addCoordinateSlider(panel, "Horizontal position", xKey, defaultX, values, prefs)
+            addCoordinateSlider(panel, "Vertical position", yKey, defaultY, values, prefs)
+        }
+
+        addPosition("MOVE touch point", "move_x_ratio", "move_y_ratio", 0.115f, 0.67f)
+        addPosition("CAMERA touch point", "camera_x_ratio", "camera_y_ratio", 0.68f, 0.63f)
+        addPosition("JUMP touch point", "jump_x_ratio", "jump_y_ratio", 0.91f, 0.76f)
+
+        val scroll = ScrollView(this).apply {
+            addView(panel)
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(440)
+            )
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Calibrate touch positions")
+            .setView(scroll)
+            .setNegativeButton("Cancel", null)
+            .setNeutralButton("Reset defaults") { _, _ ->
+                prefs.edit()
+                    .putFloat("move_x_ratio", 0.115f)
+                    .putFloat("move_y_ratio", 0.67f)
+                    .putFloat("camera_x_ratio", 0.68f)
+                    .putFloat("camera_y_ratio", 0.63f)
+                    .putFloat("jump_x_ratio", 0.91f)
+                    .putFloat("jump_y_ratio", 0.76f)
+                    .apply()
+            }
+            .setPositiveButton("Save positions") { _, _ ->
+                val editor = prefs.edit()
+                values.forEach { (key, value) -> editor.putFloat(key, value) }
+                editor.apply()
+            }
+            .show()
+    }
+
+    private fun addCoordinateSlider(
+        panel: LinearLayout,
+        title: String,
+        key: String,
+        defaultValue: Float,
+        values: MutableMap<String, Float>,
+        prefs: android.content.SharedPreferences
+    ) {
+        val label = TextView(this).apply {
+            textSize = 13f
+            setTextColor(0xFF333333.toInt())
+        }
+        val initial = (prefs.getFloat(key, defaultValue) * 100f).toInt().coerceIn(0, 100)
+        values[key] = initial / 100f
+        label.text = "$title: $initial%"
+
+        val slider = SeekBar(this).apply {
+            max = 100
+            progress = initial
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    values[key] = progress / 100f
+                    label.text = "$title: $progress%"
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        panel.addView(label, matchWrap())
+        panel.addView(slider, matchWrap())
     }
 
     private fun refreshSpeedButton() {
