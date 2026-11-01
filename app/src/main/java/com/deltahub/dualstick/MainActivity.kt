@@ -1,6 +1,7 @@
 package com.deltahub.dualstick
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
@@ -32,12 +33,20 @@ class MainActivity : Activity() {
         root.addView(title, matchWrap())
 
         val subtitle = TextView(this).apply {
-            text = "Two floating joysticks + Jump"
+            text = "Experimental floating touch-control prototype"
             textSize = 16f
             gravity = Gravity.CENTER
             setPadding(0, dp(10), 0, dp(22))
         }
         root.addView(subtitle, matchWrap())
+
+        val privacyNote = TextView(this).apply {
+            text = "Accessibility is used only to display the floating controls and send gestures when you touch them. This app does not retrieve screen contents or send your data to a server. Android may still show a security warning because gesture access is sensitive."
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setPadding(0, dp(8), 0, dp(18))
+        }
+        root.addView(privacyNote, matchWrap())
 
         statusText = TextView(this).apply {
             textSize = 15f
@@ -47,9 +56,18 @@ class MainActivity : Activity() {
         root.addView(statusText, matchWrap())
 
         val settingsButton = Button(this).apply {
-            text = "Open Accessibility Settings"
+            text = "Review Accessibility Permission"
             setOnClickListener {
-                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Sensitive permission")
+                    .setMessage(
+                        "DualStick Overlay needs Android Accessibility gesture access to send touch gestures when you use its floating controls. It does not request permission to read screen contents. Only continue if you understand and trust this experimental app."
+                    )
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Open settings") { _, _ ->
+                        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    }
+                    .show()
             }
         }
         root.addView(settingsButton, matchWrap())
@@ -61,7 +79,7 @@ class MainActivity : Activity() {
         root.addView(refreshButton, matchWrap())
 
         val note = TextView(this).apply {
-            text = "Enable “DualStick Overlay Controls” in Accessibility settings. The floating controls should appear when the service connects. Turn the service off there to remove them."
+            text = "To remove the floating controls, turn this service off in Android Accessibility settings. The joystick input is experimental and may not work correctly in every game."
             textSize = 13f
             gravity = Gravity.CENTER
             setPadding(0, dp(24), 0, 0)
