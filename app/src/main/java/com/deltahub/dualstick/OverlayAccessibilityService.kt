@@ -79,10 +79,11 @@ class OverlayAccessibilityService : AccessibilityService() {
 
         screenWidth = newWidth
         screenHeight = newHeight
-        leftBaseX = dp(105).toFloat()
-        leftBaseY = screenHeight - dp(135).toFloat()
-        rightBaseX = screenWidth * 0.68f
-        rightBaseY = screenHeight * 0.63f
+        val prefs = getSharedPreferences("dualstick", MODE_PRIVATE)
+        leftBaseX = screenWidth * prefs.getFloat("move_x_ratio", 0.115f).coerceIn(0.02f, 0.45f)
+        leftBaseY = screenHeight * prefs.getFloat("move_y_ratio", 0.67f).coerceIn(0.20f, 0.95f)
+        rightBaseX = screenWidth * prefs.getFloat("camera_x_ratio", 0.68f).coerceIn(0.30f, 0.96f)
+        rightBaseY = screenHeight * prefs.getFloat("camera_y_ratio", 0.63f).coerceIn(0.18f, 0.90f)
 
         if (leftPointer.stroke == null) {
             leftPointer.x = leftBaseX
@@ -245,6 +246,7 @@ class OverlayAccessibilityService : AccessibilityService() {
      */
     private fun pumpGestures() {
         if (dispatching || !::windowManager.isInitialized) return
+        refreshScreenGeometry()
 
         val hasWork = leftActive || rightActive || pendingJump ||
             leftPointer.stroke?.willContinue() == true ||
@@ -291,8 +293,9 @@ class OverlayAccessibilityService : AccessibilityService() {
 
         val jumpAdded = pendingJump
         if (jumpAdded) {
-            val jumpX = screenWidth - dp(78).toFloat()
-            val jumpY = screenHeight - dp(205).toFloat()
+            val prefs = getSharedPreferences("dualstick", MODE_PRIVATE)
+            val jumpX = screenWidth * prefs.getFloat("jump_x_ratio", 0.91f).coerceIn(0.60f, 0.98f)
+            val jumpY = screenHeight * prefs.getFloat("jump_y_ratio", 0.76f).coerceIn(0.20f, 0.95f)
             val jumpPath = Path().apply {
                 moveTo(jumpX, jumpY)
                 lineTo(jumpX + 1f, jumpY + 1f)
