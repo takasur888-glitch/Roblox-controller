@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">DualStick Overlay</string>
-    <string name="accessibility_description">Displays floating game controls and sends touch gestures when you use them.</string>
+    <string name="accessibility_description">Adds floating touch controls and sends gestures only when the user interacts with those controls. Does not retrieve screen content.</string>
 </resources>
