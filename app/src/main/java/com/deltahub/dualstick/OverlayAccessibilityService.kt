@@ -75,8 +75,6 @@ class OverlayAccessibilityService : AccessibilityService() {
         val metrics = resources.displayMetrics
         val newWidth = metrics.widthPixels.toFloat()
         val newHeight = metrics.heightPixels.toFloat()
-        if (newWidth == screenWidth && newHeight == screenHeight) return
-
         screenWidth = newWidth
         screenHeight = newHeight
         val prefs = getSharedPreferences("dualstick", MODE_PRIVATE)
